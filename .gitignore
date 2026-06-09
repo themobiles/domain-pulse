@@ -1,0 +1,13 @@
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Package Manager
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
