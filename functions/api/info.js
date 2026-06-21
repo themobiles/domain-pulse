@@ -72,7 +72,6 @@ export async function onRequest(context) {
     return new Response(JSON.stringify(responseData), {
         headers: {
             "Content-Type": "application/json;charset=UTF-8",
-            "Access-Control-Allow-Origin": "*",
             // 接続情報のキャッシュを完全に防止
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache"
