@@ -97,6 +97,13 @@ To test both the frontend and the Cloudflare Functions API locally:
 
 ---
 
+## 📊 Access Statistics
+
+The access statistics graphs (aggregated by country, edge server, ISP, and browser) are automatically generated and updated daily by GitHub Actions. You can check the latest stats here:
+- [Access Statistics Chart (charts/stats.png)](charts/stats.png)
+
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
