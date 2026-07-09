@@ -158,6 +158,19 @@
                                 </table>
                             </div>
                         </div>
+
+                        <div class="shortcut-section" id="shortcut-section">
+                            <div class="shortcut-header">
+                                <span class="shortcut-title">診断ショートカット</span>
+                                <span class="shortcut-hint">回線の“今”を、ひと押しで再確認</span>
+                            </div>
+                            <div class="shortcut-grid">
+                                <button class="shortcut-button" id="shortcut-refresh">総合スキャン</button>
+                                <button class="shortcut-button" id="shortcut-network">DNS / HTTP3 再診断</button>
+                                <button class="shortcut-button" id="shortcut-copy">結果をコピー</button>
+                            </div>
+                            <div class="shortcut-result hidden" id="shortcut-result" aria-live="polite"></div>
+                        </div>
                         
                         <div class="action-container" id="actions">
                             <button class="action-button" id="refresh-button">
@@ -191,6 +204,10 @@
             const tableContainerEl = document.getElementById('info-table-container');
             const refreshBtn = document.getElementById('refresh-button');
             const retryBtn = document.getElementById('retry-button');
+            const shortcutRefreshBtn = document.getElementById('shortcut-refresh');
+            const shortcutNetworkBtn = document.getElementById('shortcut-network');
+            const shortcutCopyBtn = document.getElementById('shortcut-copy');
+            const shortcutResultEl = document.getElementById('shortcut-result');
             
             // アコーディオン要素
             const accordionToggle = document.getElementById('accordion-toggle');
@@ -221,6 +238,43 @@
             const dnssecEl = document.getElementById('info-dnssec');
             const altsvcEl = document.getElementById('info-altsvc');
             const multiplexEl = document.getElementById('info-multiplex');
+
+            const connectionHint = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+
+            function formatConnectionHint() {
+                if (!connectionHint) return 'Connection API: 非対応';
+
+                const parts = [];
+                if (connectionHint.effectiveType) parts.push(`回線: ${connectionHint.effectiveType}`);
+                if (typeof connectionHint.downlink === 'number') parts.push(`下り推定: ${connectionHint.downlink} Mbps`);
+                if (typeof connectionHint.rtt === 'number') parts.push(`端末側 RTT: ${connectionHint.rtt} ms`);
+                if (typeof connectionHint.saveData === 'boolean') parts.push(`Data Saver: ${connectionHint.saveData ? 'ON' : 'OFF'}`);
+
+                return parts.length > 0 ? parts.join(' / ') : 'Connection API: 情報取得不可';
+            }
+
+            function buildDiagnosticSummary() {
+                const lines = [
+                    `Host: ${currentHost}`,
+                    `IP: ${ipEl.textContent || 'Unknown'}`,
+                    `ISP: ${ispEl.textContent || 'Unknown'}`,
+                    `Geo: ${geoEl.textContent || 'Unknown'}`,
+                    `Edge: ${edgeEl.textContent || 'Unknown'}`,
+                    `Protocol: ${protoEl.textContent || 'Unknown'}`,
+                    `TLS: ${tlsEl.textContent || 'Unknown'}`,
+                    `RTT: ${rttEl.textContent || 'Unknown'}`,
+                    `DNSSEC: ${dnssecEl.textContent || 'Unknown'}`,
+                    formatConnectionHint()
+                ];
+
+                return lines.join('\n');
+            }
+
+            function flashShortcutResult(message, tone = 'info') {
+                shortcutResultEl.classList.remove('hidden');
+                shortcutResultEl.dataset.tone = tone;
+                shortcutResultEl.textContent = message;
+            }
 
             // 1. 動的ドメイン名取得 & 表示リファクタリング (XSS安全対策)
             const currentHost = window.location.hostname || 'domain-checker.local';
@@ -355,9 +409,10 @@
                     rayEl.textContent = data.rayId || 'Unknown';
 
                     // 新規低レイヤ診断の実行
-                    checkDNSSEC(currentHost);
+                    await checkDNSSEC(currentHost);
                     runNetworkDiagnostics(currentHost);
 
+                    flashShortcutResult(buildDiagnosticSummary(), 'success');
                     updateUIState('success');
                 } catch (error) {
                     console.error('Failed to fetch connection info:', error);
@@ -392,6 +447,7 @@
                             altsvcEl.textContent = 'h3=":443"; ma=86400 (Demo)';
                             multiplexEl.innerHTML = '<span style="color: hsl(var(--success));">有効 (単一ストリーム多重化: h3)</span>';
 
+                            flashShortcutResult(buildDiagnosticSummary(), 'success');
                             updateUIState('success');
                         }, 800);
                     } else {
@@ -483,6 +539,29 @@
                 } else {
                     ipv6Container.classList.add('hidden');
                     ipv6Btn.textContent = '完全展開';
+                }
+            });
+
+            shortcutRefreshBtn.addEventListener('click', () => {
+                flashShortcutResult('総合スキャンを実行しています...', 'info');
+                fetchConnectionInfo();
+            });
+
+            shortcutNetworkBtn.addEventListener('click', async () => {
+                flashShortcutResult('DNS / HTTP3 / 多重化の再診断を実行しています...', 'info');
+                await checkDNSSEC(currentHost);
+                runNetworkDiagnostics(currentHost);
+                flashShortcutResult(buildDiagnosticSummary(), 'success');
+            });
+
+            shortcutCopyBtn.addEventListener('click', async () => {
+                const summary = buildDiagnosticSummary();
+                try {
+                    await navigator.clipboard.writeText(summary);
+                    flashShortcutResult('診断結果をクリップボードにコピーしました。', 'success');
+                } catch (err) {
+                    console.error('Copy failed:', err);
+                    flashShortcutResult(summary, 'info');
                 }
             });
 
