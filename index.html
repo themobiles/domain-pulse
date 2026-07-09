@@ -154,6 +154,18 @@
                                             <th>HTTP 多重化接続</th>
                                             <td><span id="info-multiplex">-</span></td>
                                         </tr>
+                                        <tr>
+                                            <th>WebRTC ローカルIP</th>
+                                            <td><span id="info-webrtc-ip">検出中...</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>GPU (WebGL)</th>
+                                            <td><span id="info-gpu">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>最先端 Web API 対応</th>
+                                            <td><span id="info-web-apis">-</span></td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -238,6 +250,11 @@
             const dnssecEl = document.getElementById('info-dnssec');
             const altsvcEl = document.getElementById('info-altsvc');
             const multiplexEl = document.getElementById('info-multiplex');
+            
+            // 新規マニアック診断要素
+            const webrtcIpEl = document.getElementById('info-webrtc-ip');
+            const gpuEl = document.getElementById('info-gpu');
+            const webApisEl = document.getElementById('info-web-apis');
 
             const connectionHint = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
 
@@ -253,6 +270,18 @@
                 return parts.length > 0 ? parts.join(' / ') : 'Connection API: 情報取得不可';
             }
 
+            function getWebAPIsSummaryText() {
+                const apis = {
+                    'WebGPU': 'gpu' in navigator,
+                    'WebTransport': 'WebTransport' in window,
+                    'Wasm': typeof WebAssembly === 'object',
+                    'Bluetooth': 'bluetooth' in navigator
+                };
+                return Object.entries(apis)
+                    .map(([name, supported]) => `${name}:${supported ? '✅' : '❌'}`)
+                    .join(', ');
+            }
+
             function buildDiagnosticSummary() {
                 const lines = [
                     `Host: ${currentHost}`,
@@ -264,6 +293,9 @@
                     `TLS: ${tlsEl.textContent || 'Unknown'}`,
                     `RTT: ${rttEl.textContent || 'Unknown'}`,
                     `DNSSEC: ${dnssecEl.textContent || 'Unknown'}`,
+                    `WebRTC IP: ${webrtcIpEl.textContent || 'Unknown'}`,
+                    `GPU: ${gpuEl.textContent || 'Unknown'}`,
+                    `Web APIs: ${getWebAPIsSummaryText()}`,
                     formatConnectionHint()
                 ];
 
@@ -412,6 +444,12 @@
                     await checkDNSSEC(currentHost);
                     runNetworkDiagnostics(currentHost);
 
+                    // 新規マニアック診断の実行
+                    const webrtcIp = await detectWebRTCIP();
+                    webrtcIpEl.textContent = webrtcIp;
+                    gpuEl.textContent = getGPUSpecs();
+                    webApisEl.innerHTML = checkWebAPIs();
+
                     flashShortcutResult(buildDiagnosticSummary(), 'success');
                     updateUIState('success');
                 } catch (error) {
@@ -447,6 +485,10 @@
                             altsvcEl.textContent = 'h3=":443"; ma=86400 (Demo)';
                             multiplexEl.innerHTML = '<span style="color: hsl(var(--success));">有効 (単一ストリーム多重化: h3)</span>';
 
+                            webrtcIpEl.textContent = '240d-f-942-6500.local (mDNS難読化済 - Demo)';
+                            gpuEl.textContent = 'ANGLE (Apple, Apple M2 Pro, OpenGL 4.1) - Demo';
+                            webApisEl.innerHTML = checkWebAPIs();
+
                             flashShortcutResult(buildDiagnosticSummary(), 'success');
                             updateUIState('success');
                         }, 800);
@@ -454,6 +496,112 @@
                         updateUIState('error');
                     }
                 }
+            }
+
+            // WebRTC ローカルIP漏洩検出
+            function detectWebRTCIP() {
+                return new Promise((resolve) => {
+                    const ips = [];
+                    let pc;
+                    try {
+                        pc = new RTCPeerConnection({
+                            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                        });
+                    } catch (e) {
+                        resolve('非対応 / ブロック中');
+                        return;
+                    }
+                    
+                    pc.createDataChannel('');
+                    pc.createOffer()
+                        .then(offer => pc.setLocalDescription(offer))
+                        .catch(() => {
+                            pc.close();
+                            resolve('取得エラー');
+                        });
+                        
+                    pc.onicecandidate = (ice) => {
+                        if (!ice || !ice.candidate || !ice.candidate.candidate) {
+                            pc.close();
+                            if (ips.length === 0) {
+                                resolve('検出なし (保護済)');
+                            } else {
+                                resolve([...new Set(ips)].join(', '));
+                            }
+                            return;
+                        }
+                        
+                        const candidateStr = ice.candidate.candidate;
+                        const parts = candidateStr.split(' ');
+                        // 接続候補からIPアドレスとタイプをパース
+                        if (parts.length > 7) {
+                            const ip = parts[4];
+                            const type = parts[7];
+                            if (type === 'host') {
+                                if (ip.includes('.local')) {
+                                    ips.push(`${ip} (mDNS難読化済)`);
+                                } else {
+                                    ips.push(`${ip} (ローカルIP露出)`);
+                                }
+                            } else if (type === 'srflx') {
+                                ips.push(`${ip} (STUN経由)`);
+                            }
+                        }
+                    };
+                    
+                    // 1.8秒で強制タイムアウト (ICE収集が長引くのを防ぐ)
+                    setTimeout(() => {
+                        if (pc.signalingState !== 'closed') {
+                            pc.close();
+                            if (ips.length === 0) {
+                                resolve('検出なし (タイムアウト)');
+                            } else {
+                                resolve([...new Set(ips)].join(', '));
+                            }
+                        }
+                    }, 1800);
+                });
+            }
+
+            // GPU & WebGLスペック特定
+            function getGPUSpecs() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (!gl) return 'WebGL 非対応';
+                    
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (!debugInfo) {
+                        return gl.getParameter(gl.RENDERER) || '不明 (制限あり)';
+                    }
+                    
+                    return gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '情報取得不可';
+                } catch (e) {
+                    console.error('GPU check error:', e);
+                    return '検出エラー';
+                }
+            }
+
+            // 最先端 Web API 対応状況チェック (HTMLバッジ構築)
+            function checkWebAPIs() {
+                const apis = {
+                    'WebGPU': 'gpu' in navigator,
+                    'WebTransport': 'WebTransport' in window,
+                    'Wasm': typeof WebAssembly === 'object',
+                    'WebXR': 'xr' in navigator,
+                    'Bluetooth': 'bluetooth' in navigator,
+                    'USB': 'usb' in navigator,
+                    'ServiceWorker': 'serviceWorker' in navigator
+                };
+                
+                let html = '<div class="api-badge-grid">';
+                for (const [name, supported] of Object.entries(apis)) {
+                    const badgeClass = supported ? 'api-badge supported' : 'api-badge unsupported';
+                    const label = supported ? '✅ ' + name : '❌ ' + name;
+                    html += `<span class="${badgeClass}">${label}</span>`;
+                }
+                html += '</div>';
+                return html;
             }
 
             // 5. DNSSEC検証処理 (DoH API使用)
@@ -548,9 +696,15 @@
             });
 
             shortcutNetworkBtn.addEventListener('click', async () => {
-                flashShortcutResult('DNS / HTTP3 / 多重化の再診断を実行しています...', 'info');
+                flashShortcutResult('DNS / HTTP3 / WebRTC / デバイスの再診断を実行しています...', 'info');
                 await checkDNSSEC(currentHost);
                 runNetworkDiagnostics(currentHost);
+                
+                const webrtcIp = await detectWebRTCIP();
+                webrtcIpEl.textContent = webrtcIp;
+                gpuEl.textContent = getGPUSpecs();
+                webApisEl.innerHTML = checkWebAPIs();
+                
                 flashShortcutResult(buildDiagnosticSummary(), 'success');
             });
 
