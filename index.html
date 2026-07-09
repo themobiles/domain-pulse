@@ -283,7 +283,9 @@
             }
 
             function buildDiagnosticSummary() {
+                const now = new Date().toLocaleTimeString('ja-JP');
                 const lines = [
+                    `=== 総合診断レポート (${now}) ===`,
                     `Host: ${currentHost}`,
                     `IP: ${ipEl.textContent || 'Unknown'}`,
                     `ISP: ${ispEl.textContent || 'Unknown'}`,
@@ -292,6 +294,21 @@
                     `Protocol: ${protoEl.textContent || 'Unknown'}`,
                     `TLS: ${tlsEl.textContent || 'Unknown'}`,
                     `RTT: ${rttEl.textContent || 'Unknown'}`,
+                    `DNSSEC: ${dnssecEl.textContent || 'Unknown'}`,
+                    `WebRTC IP: ${webrtcIpEl.textContent || 'Unknown'}`,
+                    `GPU: ${gpuEl.textContent || 'Unknown'}`,
+                    `Web APIs: ${getWebAPIsSummaryText()}`,
+                    formatConnectionHint()
+                ];
+
+                return lines.join('\n');
+            }
+
+            function buildShortcutNetworkSummary() {
+                const now = new Date().toLocaleTimeString('ja-JP');
+                const lines = [
+                    `=== DNS & デバイス診断レポート (${now}) ===`,
+                    `Host: ${currentHost}`,
                     `DNSSEC: ${dnssecEl.textContent || 'Unknown'}`,
                     `WebRTC IP: ${webrtcIpEl.textContent || 'Unknown'}`,
                     `GPU: ${gpuEl.textContent || 'Unknown'}`,
@@ -705,11 +722,11 @@
                 gpuEl.textContent = getGPUSpecs();
                 webApisEl.innerHTML = checkWebAPIs();
                 
-                flashShortcutResult(buildDiagnosticSummary(), 'success');
+                flashShortcutResult(buildShortcutNetworkSummary(), 'success');
             });
 
             shortcutCopyBtn.addEventListener('click', async () => {
-                const summary = buildDiagnosticSummary();
+                const summary = shortcutResultEl.textContent || buildDiagnosticSummary();
                 try {
                     await navigator.clipboard.writeText(summary);
                     flashShortcutResult('診断結果をクリップボードにコピーしました。', 'success');
