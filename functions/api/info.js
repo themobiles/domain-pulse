@@ -66,7 +66,10 @@ export async function onRequest(context) {
         tlsVersion: cf.tlsVersion || "Unknown",
         tlsCipher: cf.tlsCipher || "Unknown",
         edgeLocation: edgeLocation,
-        rayId: cfRay || "Unknown"
+        rayId: cfRay || "Unknown",
+        referer: request.headers.get("Referer") || "なし",
+        accept: request.headers.get("Accept") || "Unknown",
+        proxyHeaders: [request.headers.get("Via"), request.headers.get("X-Forwarded-For")].filter(Boolean).join(", ") || "なし"
     };
 
     return new Response(JSON.stringify(responseData), {

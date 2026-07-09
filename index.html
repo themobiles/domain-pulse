@@ -100,11 +100,27 @@
                                     <th>接続元地域</th>
                                     <td><span id="info-geo">-</span></td>
                                 </tr>
-                                <tr>
-                                    <th>ブラウザ (UA)</th>
-                                    <td><span class="ua-text" id="info-ua">-</span></td>
-                                </tr>
-                            </tbody>
+                                 <tr>
+                                     <th>ブラウザ (UA)</th>
+                                     <td><span class="ua-text" id="info-ua">-</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>リモートホスト</th>
+                                     <td><span id="info-reverse-dns">DNS逆引き中...</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>リンク元 (Referer)</th>
+                                     <td><span id="info-referer">-</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>プロキシの有無</th>
+                                     <td><span id="info-proxy">-</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>受信可能データ</th>
+                                     <td><span class="ua-text" id="info-accept">-</span></td>
+                                 </tr>
+                             </tbody>
                         </table>
 
                         <!-- アコーディオンパネル: インフラオタク向け詳細診断 -->
@@ -255,6 +271,12 @@
             const webrtcIpEl = document.getElementById('info-webrtc-ip');
             const gpuEl = document.getElementById('info-gpu');
             const webApisEl = document.getElementById('info-web-apis');
+            
+            // 確認くん互換要素
+            const reverseDnsEl = document.getElementById('info-reverse-dns');
+            const refererEl = document.getElementById('info-referer');
+            const proxyEl = document.getElementById('info-proxy');
+            const acceptEl = document.getElementById('info-accept');
 
             const connectionHint = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
 
@@ -288,8 +310,11 @@
                     `=== 総合診断レポート (${now}) ===`,
                     `Host: ${currentHost}`,
                     `IP: ${ipEl.textContent || 'Unknown'}`,
+                    `リモートホスト: ${reverseDnsEl.textContent || 'Unknown'}`,
                     `ISP: ${ispEl.textContent || 'Unknown'}`,
                     `Geo: ${geoEl.textContent || 'Unknown'}`,
+                    `リンク元: ${refererEl.textContent || 'なし'}`,
+                    `プロキシ: ${proxyEl.textContent || 'なし'}`,
                     `Edge: ${edgeEl.textContent || 'Unknown'}`,
                     `Protocol: ${protoEl.textContent || 'Unknown'}`,
                     `TLS: ${tlsEl.textContent || 'Unknown'}`,
@@ -309,6 +334,8 @@
                 const lines = [
                     `=== DNS & デバイス診断レポート (${now}) ===`,
                     `Host: ${currentHost}`,
+                    `リモートホスト: ${reverseDnsEl.textContent || 'Unknown'}`,
+                    `プロキシ: ${proxyEl.textContent || 'なし'}`,
                     `DNSSEC: ${dnssecEl.textContent || 'Unknown'}`,
                     `WebRTC IP: ${webrtcIpEl.textContent || 'Unknown'}`,
                     `GPU: ${gpuEl.textContent || 'Unknown'}`,
@@ -467,6 +494,13 @@
                     gpuEl.textContent = getGPUSpecs();
                     webApisEl.innerHTML = checkWebAPIs();
 
+                    // 確認くん互換診断
+                    const revDns = await reverseDNS(data.ip);
+                    reverseDnsEl.textContent = revDns;
+                    refererEl.textContent = data.referer || 'なし';
+                    proxyEl.textContent = data.proxyHeaders && data.proxyHeaders !== 'なし' ? 'あり (' + data.proxyHeaders + ')' : 'なし';
+                    acceptEl.textContent = data.accept || 'Unknown';
+
                     flashShortcutResult(buildDiagnosticSummary(), 'success');
                     updateUIState('success');
                 } catch (error) {
@@ -506,12 +540,60 @@
                             gpuEl.textContent = 'ANGLE (Apple, Apple M2 Pro, OpenGL 4.1) - Demo';
                             webApisEl.innerHTML = checkWebAPIs();
 
+                            reverseDnsEl.textContent = 'f-942-6500.tokyo.ap.net (Demo)';
+                            refererEl.textContent = 'https://www.google.com/ (Demo)';
+                            proxyEl.textContent = 'なし (Demo)';
+                            acceptEl.textContent = 'text/html,application/xhtml+xml,image/webp (Demo)';
+
                             flashShortcutResult(buildDiagnosticSummary(), 'success');
                             updateUIState('success');
                         }, 800);
                     } else {
                         updateUIState('error');
                     }
+                }
+            }
+
+            // IPアドレスのDNS逆引き (DoH PTRレコードクエリ)
+            async function reverseDNS(ip) {
+                if (!ip || ip === 'Unknown' || ip === '127.0.0.1' || ip === '::1') {
+                    return 'ローカル接続 (逆引き不可)';
+                }
+                
+                try {
+                    let queryName = '';
+                    if (ip.includes(':')) {
+                        // IPv6の逆引きドメイン構築
+                        const expanded = expandIPv6(ip);
+                        if (!expanded) return 'IPv6形式エラー';
+                        const hexStr = expanded.replace(/:/g, '');
+                        const reversedHex = hexStr.split('').reverse().join('.');
+                        queryName = reversedHex + '.ip6.arpa';
+                    } else {
+                        // IPv4の逆引きドメイン構築
+                        const parts = ip.split('.');
+                        if (parts.length !== 4) return 'IPv4形式エラー';
+                        queryName = parts.reverse().join('.') + '.in-addr.arpa';
+                    }
+
+                    const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(queryName)}&type=PTR`;
+                    const response = await fetch(url, {
+                        headers: { 'Accept': 'application/dns-json' }
+                    });
+                    if (!response.ok) throw new Error('DoH reverse DNS failed');
+                    const dnsData = await response.json();
+                    
+                    if (dnsData.Answer && dnsData.Answer.length > 0) {
+                        let ptrName = dnsData.Answer[0].data;
+                        if (ptrName.endsWith('.')) {
+                            ptrName = ptrName.slice(0, -1);
+                        }
+                        return ptrName;
+                    }
+                    return '逆引きレコードなし (リモートホスト不明)';
+                } catch (err) {
+                    console.error('Reverse DNS check error:', err);
+                    return '逆引きエラー';
                 }
             }
 
@@ -721,6 +803,10 @@
                 webrtcIpEl.textContent = webrtcIp;
                 gpuEl.textContent = getGPUSpecs();
                 webApisEl.innerHTML = checkWebAPIs();
+
+                // リモートホストの再取得
+                const revDns = await reverseDNS(ipEl.textContent);
+                reverseDnsEl.textContent = revDns;
                 
                 flashShortcutResult(buildShortcutNetworkSummary(), 'success');
             });
