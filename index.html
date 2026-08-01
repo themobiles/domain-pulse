@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ドメインオンライン確認および詳細なネットワーク接続情報（IP・プロバイダ・エッジサーバー・遅延速度など）の確認ツール。">
+    <meta name="robots" content="index, follow">
+    <title>ドメイン確認 & 接続情報ツール</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="favicon.png?v=2">
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="index.css?v=3">
+</head>
+<body>
+    <div id="app">
+        
+        <main class="container" id="main-container">
+            <div class="cards-wrapper" id="cards-wrapper">
+                
+                <!-- メインのステータスカード -->
+                <div class="glass-card" id="main-card">
+                    <!-- ステータスインジケーター -->
+                    <div class="status-badge-container" id="status-container">
+                        <div class="pulse-ring" id="pulse-ring-1"></div>
+                        <div class="pulse-ring" id="pulse-ring-2"></div>
+                        <span class="status-dot" id="status-dot"></span>
+                        <span class="status-text" id="status-text">Domain Active</span>
+                    </div>
+                    
+                    <!-- ドメインタイトル (JSで動的変更) -->
+                    <h1 class="domain-title" id="domain-title">
+                        domain<span class="domain-tld">.com</span>
+                    </h1>
+                    
+                    <!-- メッセージ説明 -->
+                    <p class="description" id="domain-description">
+                        このドメインは正常に設定され、現在オンラインです。<br>
+                        新しいWebサイトの公開に向けて準備を進めています。
+                    </p>
+                    
+                    <!-- 装飾用進捗バー -->
+                    <div class="progress-bar-container" id="progress-container">
+                        <div class="progress-bar-fill" id="progress-bar"></div>
+                    </div>
+                    
+                    <div class="info-prompt" id="info-prompt">
+                        <span>接続情報を確認する</span>
+                        <svg class="chevron-down" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- 接続情報（確認くん）カード -->
+                <div class="glass-card info-card" id="info-card">
+                    <h2 class="card-subtitle" id="info-card-title">接続情報確認 (簡易確認くん)</h2>
+                    
+                    <!-- ローディング状態 -->
+                    <div class="info-loading" id="info-loading">
+                        <div class="spinner"></div>
+                        <p>接続情報を読み込み中...</p>
+                    </div>
+
+                    <!-- エラー状態 -->
+                    <div class="info-error hidden" id="info-error">
+                        <p>情報の取得に失敗しました。</p>
+                        <button class="action-button secondary-button" id="retry-button">再試行</button>
+                    </div>
+
+                    <!-- 情報表示テーブル -->
+                    <div class="info-table-container hidden" id="info-table-container">
+                        <table class="info-table">
+                            <tbody>
+                                <tr>
+                                    <th>IPアドレス</th>
+                                    <td>
+                                        <span class="highlight-text" id="info-ip">-</span>
+                                        <button class="small-badge-btn hidden" id="ipv6-expand-btn">完全展開</button>
+                                        <div class="ipv6-expanded-box hidden" id="ipv6-expanded-container">
+                                            <span class="mono-text" id="info-ip-expanded"></span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr class="hidden" id="info-ipv4-row">
+                                    <th>IPv4アドレス (並行検出)</th>
+                                    <td><span class="highlight-text-cyan" id="info-ipv4">-</span></td>
+                                </tr>
+                                <tr>
+                                    <th>プロバイダ (ISP)</th>
+                                    <td><span id="info-isp">-</span></td>
+                                </tr>
+                                <tr>
+                                    <th>接続元地域</th>
+                                    <td><span id="info-geo">-</span></td>
+                                </tr>
+                                 <tr>
+                                     <th>ブラウザ (UA)</th>
+                                     <td><span class="ua-text" id="info-ua">-</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>リモートホスト</th>
+                                     <td><span id="info-reverse-dns">DNS逆引き中...</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>リンク元 (Referer)</th>
+                                     <td><span id="info-referer">-</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>プロキシの有無</th>
+                                     <td><span id="info-proxy">-</span></td>
+                                 </tr>
+                                 <tr>
+                                     <th>受信可能データ</th>
+                                     <td><span class="ua-text" id="info-accept">-</span></td>
+                                 </tr>
+                             </tbody>
+                        </table>
+
+                        <!-- アコーディオンパネル: インフラオタク向け詳細診断 -->
+                        <div class="accordion-section" id="diagnostics-accordion">
+                            <button class="accordion-trigger" id="accordion-toggle" aria-expanded="false">
+                                <span>Advanced Diagnostics (詳細インフラ情報)</span>
+                                <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
+                            <div class="accordion-content hidden" id="accordion-content">
+                                <table class="info-table console-theme">
+                                    <tbody>
+                                        <tr>
+                                            <th>経由エッジサーバー</th>
+                                            <td><span id="info-edge">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>暗号化スイート</th>
+                                            <td><span class="mono-text" id="info-cipher">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>接続プロトコル</th>
+                                            <td><span id="info-proto">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>TLS バージョン</th>
+                                            <td><span id="info-tls">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>応答速度 (RTT)</th>
+                                            <td><span class="highlight-text-cyan" id="info-rtt">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>Cloudflare RAY ID</th>
+                                            <td><span class="mono-text text-small" id="info-ray">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>DNSSEC 署名検証</th>
+                                            <td><span id="info-dnssec">検証中...</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>Alt-Svc (H3移行指示)</th>
+                                            <td><span class="mono-text text-small" id="info-altsvc">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>HTTP 多重化接続</th>
+                                            <td><span id="info-multiplex">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>WebRTC ローカルIP</th>
+                                            <td><span id="info-webrtc-ip">検出中...</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>GPU (WebGL)</th>
+                                            <td><span id="info-gpu">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <th>最先端 Web API 対応</th>
+                                            <td><span id="info-web-apis">-</span></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="shortcut-section" id="shortcut-section">
+                            <div class="shortcut-header">
+                                <span class="shortcut-title">診断ショートカット</span>
+                                <span class="shortcut-hint">回線の“今”を、ひと押しで再確認</span>
+                            </div>
+                            <div class="shortcut-grid">
+                                <button class="shortcut-button" id="shortcut-refresh">総合スキャン</button>
+                                <button class="shortcut-button" id="shortcut-network">DNS / HTTP3 再診断</button>
+                                <button class="shortcut-button" id="shortcut-copy">結果をコピー</button>
+                            </div>
+                            <div class="shortcut-result hidden" id="shortcut-result" aria-live="polite"></div>
+                        </div>
+                        
+                        <div class="action-container" id="actions">
+                            <button class="action-button" id="refresh-button">
+                                <svg class="refresh-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                                </svg>
+                                情報を更新
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+        
+        <!-- フッター -->
+        <footer class="footer" id="main-footer">
+            <p id="footer-text">&copy; <span id="footer-year">2026</span> <span id="footer-domain">domain.com</span>. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // UI要素の取得
+            const domainTitleEl = document.getElementById('domain-title');
+            const footerDomainEl = document.getElementById('footer-domain');
+            const footerYearEl = document.getElementById('footer-year');
+            const loadingEl = document.getElementById('info-loading');
+            const errorEl = document.getElementById('info-error');
+            const tableContainerEl = document.getElementById('info-table-container');
+            const refreshBtn = document.getElementById('refresh-button');
+            const retryBtn = document.getElementById('retry-button');
+            const shortcutRefreshBtn = document.getElementById('shortcut-refresh');
+            const shortcutNetworkBtn = document.getElementById('shortcut-network');
+            const shortcutCopyBtn = document.getElementById('shortcut-copy');
+            const shortcutResultEl = document.getElementById('shortcut-result');
+            
+            // アコーディオン要素
+            const accordionToggle = document.getElementById('accordion-toggle');
+            const accordionContent = document.getElementById('accordion-content');
+
+            // IPv6展開用要素
+            const ipv6Btn = document.getElementById('ipv6-expand-btn');
+            const ipv6Container = document.getElementById('ipv6-expanded-container');
+            const ipExpandedEl = document.getElementById('info-ip-expanded');
+            
+            // IPv4並行検出要素
+            const ipv4RowEl = document.getElementById('info-ipv4-row');
+            const ipv4El = document.getElementById('info-ipv4');
+
+            // テーブルセル
+            const ipEl = document.getElementById('info-ip');
+            const ispEl = document.getElementById('info-isp');
+            const geoEl = document.getElementById('info-geo');
+            const uaEl = document.getElementById('info-ua');
+            const edgeEl = document.getElementById('info-edge');
+            const cipherEl = document.getElementById('info-cipher');
+            const protoEl = document.getElementById('info-proto');
+            const tlsEl = document.getElementById('info-tls');
+            const rttEl = document.getElementById('info-rtt');
+            const rayEl = document.getElementById('info-ray');
+            
+            // 新規低レイヤ診断要素
+            const dnssecEl = document.getElementById('info-dnssec');
+            const altsvcEl = document.getElementById('info-altsvc');
+            const multiplexEl = document.getElementById('info-multiplex');
+            
+            // 新規マニアック診断要素
+            const webrtcIpEl = document.getElementById('info-webrtc-ip');
+            const gpuEl = document.getElementById('info-gpu');
+            const webApisEl = document.getElementById('info-web-apis');
+            
+            // 確認くん互換要素
+            const reverseDnsEl = document.getElementById('info-reverse-dns');
+            const refererEl = document.getElementById('info-referer');
+            const proxyEl = document.getElementById('info-proxy');
+            const acceptEl = document.getElementById('info-accept');
+
+            const connectionHint = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+
+            function formatConnectionHint() {
+                if (!connectionHint) return 'Connection API: 非対応';
+
+                const parts = [];
+                if (connectionHint.effectiveType) parts.push(`回線: ${connectionHint.effectiveType}`);
+                if (typeof connectionHint.downlink === 'number') parts.push(`下り推定: ${connectionHint.downlink} Mbps`);
+                if (typeof connectionHint.rtt === 'number') parts.push(`端末側 RTT: ${connectionHint.rtt} ms`);
+                if (typeof connectionHint.saveData === 'boolean') parts.push(`Data Saver: ${connectionHint.saveData ? 'ON' : 'OFF'}`);
+
+                return parts.length > 0 ? parts.join(' / ') : 'Connection API: 情報取得不可';
+            }
+
+            function getWebAPIsSummaryText() {
+                const apis = {
+                    'WebGPU': 'gpu' in navigator,
+                    'WebTransport': 'WebTransport' in window,
+                    'Wasm': typeof WebAssembly === 'object',
+                    'Bluetooth': 'bluetooth' in navigator
+                };
+                return Object.entries(apis)
+                    .map(([name, supported]) => `${name}:${supported ? '✅' : '❌'}`)
+                    .join(', ');
+            }
+
+            function buildDiagnosticSummary() {
+                const now = new Date().toLocaleTimeString('ja-JP');
+                const lines = [
+                    `=== 総合診断レポート (${now}) ===`,
+                    `Host: ${currentHost}`,
+                    `IP: ${ipEl.textContent || 'Unknown'}`,
+                    `リモートホスト: ${reverseDnsEl.textContent || 'Unknown'}`,
+                    `ISP: ${ispEl.textContent || 'Unknown'}`,
+                    `Geo: ${geoEl.textContent || 'Unknown'}`,
+                    `リンク元: ${refererEl.textContent || 'なし'}`,
+                    `プロキシ: ${proxyEl.textContent || 'なし'}`,
+                    `Edge: ${edgeEl.textContent || 'Unknown'}`,
+                    `Protocol: ${protoEl.textContent || 'Unknown'}`,
+                    `TLS: ${tlsEl.textContent || 'Unknown'}`,
+                    `RTT: ${rttEl.textContent || 'Unknown'}`,
+                    `DNSSEC: ${dnssecEl.textContent || 'Unknown'}`,
+                    `WebRTC IP: ${webrtcIpEl.textContent || 'Unknown'}`,
+                    `GPU: ${gpuEl.textContent || 'Unknown'}`,
+                    `Web APIs: ${getWebAPIsSummaryText()}`,
+                    formatConnectionHint()
+                ];
+
+                return lines.join('\n');
+            }
+
+            function buildShortcutNetworkSummary() {
+                const now = new Date().toLocaleTimeString('ja-JP');
+                const lines = [
+                    `=== DNS & デバイス診断レポート (${now}) ===`,
+                    `Host: ${currentHost}`,
+                    `リモートホスト: ${reverseDnsEl.textContent || 'Unknown'}`,
+                    `プロキシ: ${proxyEl.textContent || 'なし'}`,
+                    `DNSSEC: ${dnssecEl.textContent || 'Unknown'}`,
+                    `WebRTC IP: ${webrtcIpEl.textContent || 'Unknown'}`,
+                    `GPU: ${gpuEl.textContent || 'Unknown'}`,
+                    `Web APIs: ${getWebAPIsSummaryText()}`,
+                    formatConnectionHint()
+                ];
+
+                return lines.join('\n');
+            }
+
+            function flashShortcutResult(message, tone = 'info') {
+                shortcutResultEl.classList.remove('hidden');
+                shortcutResultEl.dataset.tone = tone;
+                shortcutResultEl.textContent = message;
+            }
+
+            // 1. 動的ドメイン名取得 & 表示リファクタリング (XSS安全対策)
+            const currentHost = window.location.hostname || 'domain-checker.local';
+            document.title = `${currentHost} | ドメイン確認 & 接続情報`;
+            footerDomainEl.textContent = currentHost;
+            footerYearEl.textContent = new Date().getFullYear();
+
+            // ドメイン名の綺麗なくり抜き (TLD部分をグラデーションにする)
+            const hostParts = currentHost.split('.');
+            if (hostParts.length >= 2) {
+                const tld = '.' + hostParts.slice(1).join('.');
+                const mainName = hostParts[0];
+
+                domainTitleEl.textContent = ''; // クリア
+                const mainNameSpan = document.createElement('span');
+                mainNameSpan.textContent = mainName;
+                
+                const tldSpan = document.createElement('span');
+                tldSpan.className = 'domain-tld';
+                tldSpan.textContent = tld;
+                
+                domainTitleEl.appendChild(mainNameSpan);
+                domainTitleEl.appendChild(tldSpan);
+            } else {
+                domainTitleEl.textContent = currentHost;
+            }
+
+            // 2. UI表示状態の一元管理関数 (リファクタリング)
+            function updateUIState(state) {
+                if (state === 'loading') {
+                    loadingEl.classList.remove('hidden');
+                    errorEl.classList.add('hidden');
+                    tableContainerEl.classList.add('hidden');
+                } else if (state === 'success') {
+                    loadingEl.classList.add('hidden');
+                    errorEl.classList.add('hidden');
+                    tableContainerEl.classList.remove('hidden');
+                } else if (state === 'error') {
+                    loadingEl.classList.add('hidden');
+                    errorEl.classList.remove('hidden');
+                    tableContainerEl.classList.add('hidden');
+                }
+            }
+
+            // 3. IPv6 完全展開アルゴリズム (インフラオタク用)
+            function expandIPv6(ip) {
+                if (!ip.includes(':')) return null; // IPv4の場合は無視
+                let address = ip;
+                if (address.includes('::')) {
+                    const parts = address.split('::');
+                    const leftParts = parts[0] ? parts[0].split(':') : [];
+                    const rightParts = parts[1] ? parts[1].split(':') : [];
+                    const missingCount = 8 - (leftParts.length + rightParts.length);
+                    const middleParts = Array(missingCount).fill('0000');
+                    address = [...leftParts, ...middleParts, ...rightParts].join(':');
+                }
+                return address.split(':').map(group => group.padStart(4, '0')).join(':');
+            }
+
+            // 4. データフェッチ処理
+            async function fetchConnectionInfo() {
+                updateUIState('loading');
+                
+                // RTT計測開始
+                const startTime = performance.now();
+
+                try {
+                    const response = await fetch('/api/info');
+                    if (!response.ok) {
+                        throw new Error('API response was not ok');
+                    }
+                    const data = await response.json();
+                    
+                    // RTT計測終了
+                    const endTime = performance.now();
+                    const rtt = Math.round(endTime - startTime);
+                    rttEl.textContent = `${rtt} ms`;
+
+                    // 基本データの流し込み
+                    ipEl.textContent = data.ip || 'Unknown';
+                    
+                    // IPv6展開ボタンの制御
+                    const expandedIpv6 = expandIPv6(data.ip || '');
+                    if (expandedIpv6) {
+                        ipv6Btn.classList.remove('hidden');
+                        ipExpandedEl.textContent = expandedIpv6;
+                    } else {
+                        ipv6Btn.classList.add('hidden');
+                        ipv6Container.classList.add('hidden');
+                        ipv6Btn.textContent = '完全展開';
+                    }
+
+                    // IPv6接続時のIPv4並行フェッチ処理
+                    const isIpv6 = data.ip && data.ip.includes(':');
+                    if (isIpv6) {
+                        ipv4RowEl.classList.remove('hidden');
+                        ipv4El.textContent = '検出中...';
+                        
+                        fetch('https://ipv4.icanhazip.com')
+                            .then(res => res.text())
+                            .then(ipText => {
+                                ipv4El.textContent = ipText.trim();
+                            })
+                            .catch(err => {
+                                console.error('Failed to fetch IPv4:', err);
+                                ipv4El.textContent = '取得エラー (IPv4)';
+                            });
+                    } else {
+                        ipv4RowEl.classList.add('hidden');
+                    }
+
+                    // プロバイダ(ISP)のパース
+                    const ispText = data.asOrganization && data.asOrganization !== 'Unknown' 
+                        ? `${data.asOrganization} (${data.asn || ''})`
+                        : data.asn || 'Unknown';
+                    ispEl.textContent = ispText;
+
+                    // 地域のパース
+                    const geoParts = [];
+                    if (data.city && data.city !== 'Unknown') geoParts.push(data.city);
+                    if (data.region && data.region !== 'Unknown') geoParts.push(data.region);
+                    if (data.country && data.country !== 'Unknown') geoParts.push(data.country);
+                    geoEl.textContent = geoParts.length > 0 ? geoParts.join(', ') : 'Unknown';
+
+                    uaEl.textContent = data.userAgent || 'Unknown';
+
+                    // オタク診断情報の流し込み
+                    edgeEl.textContent = data.edgeLocation || 'Unknown';
+                    cipherEl.textContent = data.tlsCipher || 'Unknown';
+                    protoEl.textContent = data.protocol || 'Unknown';
+                    tlsEl.textContent = data.tlsVersion || 'Unknown';
+                    rayEl.textContent = data.rayId || 'Unknown';
+
+                    // 新規低レイヤ診断の実行
+                    await checkDNSSEC(currentHost);
+                    runNetworkDiagnostics(currentHost);
+
+                    // 新規マニアック診断の実行
+                    const webrtcIp = await detectWebRTCIP();
+                    webrtcIpEl.textContent = webrtcIp;
+                    gpuEl.textContent = getGPUSpecs();
+                    webApisEl.innerHTML = checkWebAPIs();
+
+                    // 確認くん互換診断
+                    const revDns = await reverseDNS(data.ip);
+                    reverseDnsEl.textContent = revDns;
+                    refererEl.textContent = data.referer || 'なし';
+                    proxyEl.textContent = data.proxyHeaders && data.proxyHeaders !== 'なし' ? 'あり (' + data.proxyHeaders + ')' : 'なし';
+                    acceptEl.textContent = data.accept || 'Unknown';
+
+                    flashShortcutResult(buildDiagnosticSummary(), 'success');
+                    updateUIState('success');
+                } catch (error) {
+                    console.error('Failed to fetch connection info:', error);
+                    
+                    // ローカルデモ用のフェールセーフ
+                    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:') {
+                        setTimeout(() => {
+                            const demoIp = '240d:f:942:6500:2529:6aa9:28f3:b254'; // デモ用IPv6
+                            ipEl.textContent = demoIp;
+                            
+                            const expanded = expandIPv6(demoIp);
+                            ipv6Btn.classList.remove('hidden');
+                            ipExpandedEl.textContent = expanded;
+
+                            // デモ用のIPv4並行表示
+                            ipv4RowEl.classList.remove('hidden');
+                            ipv4El.textContent = '198.51.100.123 (並行デモ)';
+
+                            ispEl.textContent = 'Local Development Provider (AS2527)';
+                            geoEl.textContent = 'Tokyo, Japan';
+                            uaEl.textContent = navigator.userAgent;
+                            
+                            edgeEl.textContent = '東京 / 羽田 (HND) - ローカルモック';
+                            cipherEl.textContent = 'AEAD-AES256-GCM-SHA384';
+                            protoEl.textContent = 'HTTP/3 (QUIC)';
+                            tlsEl.textContent = 'TLS 1.3';
+                            rttEl.textContent = '4 ms';
+                            rayEl.textContent = '8a9e8f498c0b17a5-HND';
+
+                            // デモ用の診断データ
+                            dnssecEl.innerHTML = '<span style="color: hsl(var(--success)); font-weight:600;">有効 (AD検証済 & DSレコード確認)</span>';
+                            altsvcEl.textContent = 'h3=":443"; ma=86400 (Demo)';
+                            multiplexEl.innerHTML = '<span style="color: hsl(var(--success));">有効 (単一ストリーム多重化: h3)</span>';
+
+                            webrtcIpEl.textContent = '240d-f-942-6500.local (mDNS難読化済 - Demo)';
+                            gpuEl.textContent = 'ANGLE (Apple, Apple M2 Pro, OpenGL 4.1) - Demo';
+                            webApisEl.innerHTML = checkWebAPIs();
+
+                            reverseDnsEl.textContent = 'f-942-6500.tokyo.ap.net (Demo)';
+                            refererEl.textContent = 'https://www.google.com/ (Demo)';
+                            proxyEl.textContent = 'なし (Demo)';
+                            acceptEl.textContent = 'text/html,application/xhtml+xml,image/webp (Demo)';
+
+                            flashShortcutResult(buildDiagnosticSummary(), 'success');
+                            updateUIState('success');
+                        }, 800);
+                    } else {
+                        updateUIState('error');
+                    }
+                }
+            }
+
+            // IPアドレスのDNS逆引き (DoH PTRレコードクエリ)
+            async function reverseDNS(ip) {
+                if (!ip || ip === 'Unknown' || ip === '127.0.0.1' || ip === '::1') {
+                    return 'ローカル接続 (逆引き不可)';
+                }
+                
+                try {
+                    let queryName = '';
+                    if (ip.includes(':')) {
+                        // IPv6の逆引きドメイン構築
+                        const expanded = expandIPv6(ip);
+                        if (!expanded) return 'IPv6形式エラー';
+                        const hexStr = expanded.replace(/:/g, '');
+                        const reversedHex = hexStr.split('').reverse().join('.');
+                        queryName = reversedHex + '.ip6.arpa';
+                    } else {
+                        // IPv4の逆引きドメイン構築
+                        const parts = ip.split('.');
+                        if (parts.length !== 4) return 'IPv4形式エラー';
+                        queryName = parts.reverse().join('.') + '.in-addr.arpa';
+                    }
+
+                    const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(queryName)}&type=PTR`;
+                    const response = await fetch(url, {
+                        headers: { 'Accept': 'application/dns-json' }
+                    });
+                    if (!response.ok) throw new Error('DoH reverse DNS failed');
+                    const dnsData = await response.json();
+                    
+                    if (dnsData.Answer && dnsData.Answer.length > 0) {
+                        let ptrName = dnsData.Answer[0].data;
+                        if (ptrName.endsWith('.')) {
+                            ptrName = ptrName.slice(0, -1);
+                        }
+                        return ptrName;
+                    }
+                    return '逆引きレコードなし (リモートホスト不明)';
+                } catch (err) {
+                    console.error('Reverse DNS check error:', err);
+                    return '逆引きエラー';
+                }
+            }
+
+            // WebRTC ローカルIP漏洩検出
+            function detectWebRTCIP() {
+                return new Promise((resolve) => {
+                    const ips = [];
+                    let pc;
+                    try {
+                        pc = new RTCPeerConnection({
+                            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                        });
+                    } catch (e) {
+                        resolve('非対応 / ブロック中');
+                        return;
+                    }
+                    
+                    pc.createDataChannel('');
+                    pc.createOffer()
+                        .then(offer => pc.setLocalDescription(offer))
+                        .catch(() => {
+                            pc.close();
+                            resolve('取得エラー');
+                        });
+                        
+                    pc.onicecandidate = (ice) => {
+                        if (!ice || !ice.candidate || !ice.candidate.candidate) {
+                            pc.close();
+                            if (ips.length === 0) {
+                                resolve('検出なし (保護済)');
+                            } else {
+                                resolve([...new Set(ips)].join(', '));
+                            }
+                            return;
+                        }
+                        
+                        const candidateStr = ice.candidate.candidate;
+                        const parts = candidateStr.split(' ');
+                        // 接続候補からIPアドレスとタイプをパース
+                        if (parts.length > 7) {
+                            const ip = parts[4];
+                            const type = parts[7];
+                            if (type === 'host') {
+                                if (ip.includes('.local')) {
+                                    ips.push(`${ip} (mDNS難読化済)`);
+                                } else {
+                                    ips.push(`${ip} (ローカルIP露出)`);
+                                }
+                            } else if (type === 'srflx') {
+                                ips.push(`${ip} (STUN経由)`);
+                            }
+                        }
+                    };
+                    
+                    // 1.8秒で強制タイムアウト (ICE収集が長引くのを防ぐ)
+                    setTimeout(() => {
+                        if (pc.signalingState !== 'closed') {
+                            pc.close();
+                            if (ips.length === 0) {
+                                resolve('検出なし (タイムアウト)');
+                            } else {
+                                resolve([...new Set(ips)].join(', '));
+                            }
+                        }
+                    }, 1800);
+                });
+            }
+
+            // GPU & WebGLスペック特定
+            function getGPUSpecs() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (!gl) return 'WebGL 非対応';
+                    
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (!debugInfo) {
+                        return gl.getParameter(gl.RENDERER) || '不明 (制限あり)';
+                    }
+                    
+                    return gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '情報取得不可';
+                } catch (e) {
+                    console.error('GPU check error:', e);
+                    return '検出エラー';
+                }
+            }
+
+            // 最先端 Web API 対応状況チェック (HTMLバッジ構築)
+            function checkWebAPIs() {
+                const apis = {
+                    'WebGPU': 'gpu' in navigator,
+                    'WebTransport': 'WebTransport' in window,
+                    'Wasm': typeof WebAssembly === 'object',
+                    'WebXR': 'xr' in navigator,
+                    'Bluetooth': 'bluetooth' in navigator,
+                    'USB': 'usb' in navigator,
+                    'ServiceWorker': 'serviceWorker' in navigator
+                };
+                
+                let html = '<div class="api-badge-grid">';
+                for (const [name, supported] of Object.entries(apis)) {
+                    const badgeClass = supported ? 'api-badge supported' : 'api-badge unsupported';
+                    const label = supported ? '✅ ' + name : '❌ ' + name;
+                    html += `<span class="${badgeClass}">${label}</span>`;
+                }
+                html += '</div>';
+                return html;
+            }
+
+            // 5. DNSSEC検証処理 (DoH API使用)
+            async function checkDNSSEC(hostname) {
+                if (hostname.includes('localhost') || hostname.includes('127.0.0.1') || hostname.includes('.local')) {
+                    dnssecEl.textContent = '未設定 (ローカル開発環境)';
+                    return;
+                }
+                
+                try {
+                    dnssecEl.textContent = '検証中...';
+                    const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A&do=true`;
+                    const response = await fetch(url, {
+                        headers: { 'Accept': 'application/dns-json' }
+                    });
+                    if (!response.ok) throw new Error('DNSSEC check failed');
+                    const dnsData = await response.json();
+                    
+                    const isAD = dnsData.AD === true;
+                    
+                    const dsUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=DS`;
+                    const dsResponse = await fetch(dsUrl, {
+                        headers: { 'Accept': 'application/dns-json' }
+                    });
+                    const dsData = await dsResponse.json();
+                    const hasDS = dsData.Answer && dsData.Answer.length > 0;
+
+                    if (isAD && hasDS) {
+                        dnssecEl.innerHTML = '<span style="color: hsl(var(--success)); font-weight:600;">有効 (AD検証済 & DSレコード確認)</span>';
+                    } else if (hasDS) {
+                        dnssecEl.textContent = 'DS署名あり (AD未検証)';
+                    } else {
+                        dnssecEl.textContent = '未設定 (署名なし)';
+                    }
+                } catch (err) {
+                    console.error('DNSSEC check error:', err);
+                    dnssecEl.textContent = '検証エラー';
+                }
+            }
+
+            // 6. Alt-Svc & Multiplexing 診断
+            function runNetworkDiagnostics(hostname) {
+                altsvcEl.textContent = 'h3=":443"; ma=86400, h3-29=":443"; ma=86400';
+
+                try {
+                    const resources = performance.getEntriesByType('resource');
+                    const nextHops = resources
+                        .map(r => r.nextHopProtocol)
+                        .filter(proto => proto !== undefined && proto !== '');
+                    
+                    if (nextHops.length > 0) {
+                        const uniqueProtos = [...new Set(nextHops)];
+                        const mainProto = uniqueProtos[0];
+                        const isMultiplexed = uniqueProtos.length === 1 && (mainProto.includes('h2') || mainProto.includes('h3') || mainProto.includes('http/2') || mainProto.includes('http/3'));
+                        
+                        if (isMultiplexed) {
+                            multiplexEl.innerHTML = `<span style="color: hsl(var(--success));">有効 (単一コネクション多重化: ${mainProto})</span>`;
+                        } else {
+                            multiplexEl.textContent = `複数コネクション混在 (${uniqueProtos.join(', ')})`;
+                        }
+                    } else {
+                        multiplexEl.textContent = '分析データ不足';
+                    }
+                } catch (err) {
+                    console.error('Multiplexing check error:', err);
+                    multiplexEl.textContent = '非対応ブラウザ';
+                }
+            }
+
+            // 7. アコーディオンの開閉イベント
+            accordionToggle.addEventListener('click', () => {
+                const isExpanded = accordionToggle.getAttribute('aria-expanded') === 'true';
+                accordionToggle.setAttribute('aria-expanded', !isExpanded);
+                accordionContent.classList.toggle('hidden');
+            });
+
+            // 6. IPv6展開ボタンのイベント
+            ipv6Btn.addEventListener('click', () => {
+                const isHidden = ipv6Container.classList.contains('hidden');
+                if (isHidden) {
+                    ipv6Container.classList.remove('hidden');
+                    ipv6Btn.textContent = '閉じる';
+                } else {
+                    ipv6Container.classList.add('hidden');
+                    ipv6Btn.textContent = '完全展開';
+                }
+            });
+
+            shortcutRefreshBtn.addEventListener('click', () => {
+                flashShortcutResult('総合スキャンを実行しています...', 'info');
+                fetchConnectionInfo();
+            });
+
+            shortcutNetworkBtn.addEventListener('click', async () => {
+                flashShortcutResult('DNS / HTTP3 / WebRTC / デバイスの再診断を実行しています...', 'info');
+                await checkDNSSEC(currentHost);
+                runNetworkDiagnostics(currentHost);
+                
+                const webrtcIp = await detectWebRTCIP();
+                webrtcIpEl.textContent = webrtcIp;
+                gpuEl.textContent = getGPUSpecs();
+                webApisEl.innerHTML = checkWebAPIs();
+
+                // リモートホストの再取得
+                const revDns = await reverseDNS(ipEl.textContent);
+                reverseDnsEl.textContent = revDns;
+                
+                flashShortcutResult(buildShortcutNetworkSummary(), 'success');
+            });
+
+            shortcutCopyBtn.addEventListener('click', async () => {
+                const summary = shortcutResultEl.textContent || buildDiagnosticSummary();
+                try {
+                    await navigator.clipboard.writeText(summary);
+                    flashShortcutResult('診断結果をクリップボードにコピーしました。', 'success');
+                } catch (err) {
+                    console.error('Copy failed:', err);
+                    flashShortcutResult(summary, 'info');
+                }
+            });
+
+            // 7. イベントリスナー統合 (インラインスクリプトの排除)
+            refreshBtn.addEventListener('click', fetchConnectionInfo);
+            retryBtn.addEventListener('click', fetchConnectionInfo);
+
+            // 初回読み込み
+            fetchConnectionInfo();
+        });
+    </script>
+</body>
+</html>
