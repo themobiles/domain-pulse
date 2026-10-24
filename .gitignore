@@ -1,6 +1,10 @@
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
 
 # Package Manager
 node_modules/
